@@ -250,7 +250,7 @@ const OrderForm: React.FC<Props> = ({ t, lang, isOpen, onClose, initialCart }) =
                 <h3 className="text-2xl font-bold text-accent mb-2">{t.success_title}</h3>
                 <p className="text-gray-600 mb-6">{t.success_message}</p>
                 <button 
-                    onClick={() => window.open("https://t.me/MuniraDelightsPlaceholder", "_blank")}
+                    onClick={() => window.open("https://t.me/@Mesh_brnfzu", "_blank")}
                     className="bg-[#0088cc] text-white px-6 py-3 rounded-full font-bold hover:bg-[#0077b5] transition-colors flex items-center justify-center gap-2 mx-auto"
                 >
                     <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-2.02-1.23-2.02-1.23s-.7-.44.02-1.16c.17-.16 3.42-3.13 3.48-3.39.01-.03.01-.15-.06-.21s-.19-.04-.27-.02c-.11.02-1.87 1.18-5.28 3.46-.49.34-.94.51-1.34.5-.44-.01-1.29-.25-1.92-.42-.77-.21-1.38-.32-1.32-.88.03-.29.43-.59 1.18-.9 4.62-2.01 7.71-3.34 9.27-3.99 2.66-1.11 3.21-1.3 3.57-1.3.08 0 .26.02.37.12.09.08.12.19.13.27-.01.07.01.27 0 .44z"/></svg>

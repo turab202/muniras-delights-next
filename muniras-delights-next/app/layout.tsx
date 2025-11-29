@@ -1,17 +1,6 @@
-import { Inter, Dancing_Script } from 'next/font/google'
+// app/layout.tsx (Alternative - using CDN fonts like your React app)
 import './globals.css'
 
-const inter = Inter({ 
-  subsets: ['latin'],
-  variable: '--font-inter',
-})
-
-const dancingScript = Dancing_Script({ 
-  subsets: ['latin'],
-  variable: '--font-dancing-script',
-})
-
-// Add this metadata export
 export const metadata = {
   title: "Munira's Delights",
   description: "Baking Happiness for Every Occasion",
@@ -23,8 +12,11 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en">
-      <body className={`${inter.variable} ${dancingScript.variable} ${inter.className} bg-background text-gray-800`}>
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@400;700&family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet" />
+      </head>
+      <body className="bg-background text-gray-800" suppressHydrationWarning>
         {children}
       </body>
     </html>

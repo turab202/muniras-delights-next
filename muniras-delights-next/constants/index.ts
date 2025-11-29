@@ -250,8 +250,8 @@ export const TESTIMONIALS_DATA: Testimonial[] = [
     id: 3, 
     name: { en: "Bethelhem T.", am: "ቤተልሔም ቲ.", ar: "بيت لحم ت." }, 
     text: { 
-      en: "Munira's catering made my daughter's birthday effortless and elegant. The presentation was art.", 
-      am: "የሙኒራ ኬተሪንግ የልጄን ልደት ቀላል እና የሚያምር አደረገው። አቀራረቡ ጥበብ ነበር።", 
+      en: "Munira's catering made my daughter's graduation effortless and elegant. The presentation was art.", 
+      am: "የሙኒራ ኬተሪንግ የልጄን ምርቃት ቀላል እና የሚያምር አደረገው። አቀራረቡ ጥበብ ነበር።", 
       ar: "جعلت ضيافة منيرة عيد ميلاد ابنتي سهلاً وأنيقاً. كان العرض فناً." 
     }, 
     rating: 4 

@@ -217,7 +217,7 @@ export default function Home() {
                   <MapPin size={32} />
                 </div>
                 <h3 className="text-xl font-bold text-gray-800 mb-2">{t.contact_visit}</h3>
-                <p className="text-gray-500">Bole Atlas, Next to Sapphire Addis</p>
+                <p className="text-gray-500">Jemo 3, Around Seid Yassin Mesjid</p>
                 <p className="text-gray-500">Addis Ababa, Ethiopia</p>
               </motion.div>
 
@@ -230,8 +230,8 @@ export default function Home() {
                   <Phone size={32} />
                 </div>
                 <h3 className="text-xl font-bold text-gray-800 mb-2">{t.contact_call}</h3>
-                <p className="text-gray-500 font-mono">+251 911 234 567</p>
-                <p className="text-gray-500 font-mono">+251 912 345 678</p>
+                <p className="text-gray-500 font-mono">+251 976 258 972</p>
+                <p className="text-gray-500 font-mono">+251 716 228 460</p>
               </motion.div>
 
               {/* Hours Card */}
