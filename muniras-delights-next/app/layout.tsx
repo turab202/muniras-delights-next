@@ -1,9 +1,5 @@
-'use client'
-
 import { Inter, Dancing_Script } from 'next/font/google'
 import './globals.css'
-import { useState } from 'react'
-import { Language } from '../types/index'
 
 const inter = Inter({ 
   subsets: ['latin'],
@@ -15,16 +11,20 @@ const dancingScript = Dancing_Script({
   variable: '--font-dancing-script',
 })
 
+// Add this metadata export
+export const metadata = {
+  title: "Munira's Delights",
+  description: "Baking Happiness for Every Occasion",
+}
+
 export default function RootLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
-  const [lang, setLang] = useState<Language>('en')
-
   return (
-    <html lang={lang}>
-      <body className={`${inter.variable} ${dancingScript.variable} ${inter.className}`}>
+    <html lang="en">
+      <body className={`${inter.variable} ${dancingScript.variable} ${inter.className} bg-background text-gray-800`}>
         {children}
       </body>
     </html>

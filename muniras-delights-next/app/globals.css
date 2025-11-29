@@ -1,1 +1,72 @@
+/* app/globals.css */
+/* Import fonts FIRST */
+@import url('https://fonts.googleapis.com/css2?family=Dancing+Script:wght@400;700&family=Inter:wght@300;400;600;700&display=swap');
+
+/* Then import Tailwind */
 @import "tailwindcss";
+
+/* Then define your theme */
+@theme {
+  --color-primary: #F7CAC9; /* Soft Pink - EXACT */
+  --color-secondary: #FFD700; /* Gold - EXACT */
+  --color-accent: #6B4226; /* Chocolate Brown - EXACT */
+  --color-background: #FFF8F0; /* Cream - EXACT */
+  
+  --font-family-script: '"Dancing Script"', cursive;
+  --font-family-sans: '"Inter"', sans-serif;
+  
+  --animate-float: float 6s ease-in-out infinite;
+}
+
+/* Custom animations */
+@keyframes float {
+  0%, 100% { 
+    transform: translateY(0px); 
+  }
+  50% { 
+    transform: translateY(-20px); 
+  }
+}
+
+/* Base styles to match your React app */
+body {
+  background-color: var(--color-background);
+  color: #374151; /* text-gray-800 equivalent */
+  font-family: 'Inter', sans-serif;
+}
+
+/* Ensure custom classes work */
+.font-script {
+  font-family: 'Dancing Script', cursive;
+}
+
+/* Smooth scrolling */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Backdrop blur support */
+@supports (backdrop-filter: blur(10px)) {
+  .backdrop-blur-md {
+    backdrop-filter: blur(12px);
+  }
+}
+
+@supports not (backdrop-filter: blur(10px)) {
+  .backdrop-blur-md {
+    background-color: rgba(255, 255, 255, 0.95);
+  }
+}
+
+/* Custom utilities for opacity */
+.bg-primary\/10 {
+  background-color: color-mix(in srgb, var(--color-primary) 10%, transparent);
+}
+
+.bg-primary\/20 {
+  background-color: color-mix(in srgb, var(--color-primary) 20%, transparent);
+}
+
+.border-primary\/30 {
+  border-color: color-mix(in srgb, var(--color-primary) 30%, transparent);
+}
