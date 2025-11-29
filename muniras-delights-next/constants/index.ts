@@ -1,4 +1,4 @@
-import { MenuItem, Translations, Testimonial } from './types';
+import { MenuItem, Translations, Testimonial } from '../types/index';
 
 export const TRANSLATIONS: Translations = {
   en: {

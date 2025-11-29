@@ -1,4 +1,4 @@
-use client
+"use client";
 import React, { useState, useRef } from 'react';
 import { Translations, Language, MenuItem, OrderData } from '../types';
 import { MENU_ITEMS } from '../constants';

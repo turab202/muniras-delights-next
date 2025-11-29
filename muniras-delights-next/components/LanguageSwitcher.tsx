@@ -1,4 +1,4 @@
-use client
+"use client";
 import React, { useState } from 'react';
 import { Language } from '../types';
 import { Globe } from 'lucide-react';

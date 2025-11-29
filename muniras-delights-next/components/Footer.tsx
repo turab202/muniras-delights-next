@@ -1,8 +1,8 @@
-use client
+"use client";
 import React from 'react';
 import { Facebook, Instagram, Twitter, Heart, ExternalLink } from 'lucide-react';
-import { Translations, Language } from '../types';
-import { TRANSLATIONS } from '../constants'; // Import to use logic if needed, but here we just need to receive props or useContext, but simple prop passing or context is better.
+import { Translations, Language } from '../types/index';
+import { TRANSLATIONS } from '../constants/index'; // Import to use logic if needed, but here we just need to receive props or useContext, but simple prop passing or context is better.
 // To keep it simple without Prop drilling all the way if App.tsx doesn't pass it yet, let's assume App passes it or we import based on a state. 
 // However, the cleanest way in this architecture is to accept props.
 // Since App.tsx renders Footer, I will update App.tsx to pass props. 
