@@ -3,7 +3,7 @@
 import { Inter, Dancing_Script } from 'next/font/google'
 import './globals.css'
 import { useState } from 'react'
-import { Language } from './types'
+import { Language } from '../types/index'
 
 const inter = Inter({ 
   subsets: ['latin'],
