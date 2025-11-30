@@ -13,17 +13,52 @@ interface Props {
   initialCart: { itemId: string; qty: number }[];
 }
 
+// Simple toast system
+const Toast: React.FC<{ message: string; type: 'success' | 'error' | 'warning'; onClose: () => void }> = ({ message, type, onClose }) => {
+  React.useEffect(() => {
+    const timer = setTimeout(onClose, 4000);
+    return () => clearTimeout(timer);
+  }, [onClose]);
+
+  const bgColor = {
+    success: 'bg-green-500',
+    error: 'bg-red-500',
+    warning: 'bg-yellow-500'
+  }[type];
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -50 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -50 }}
+      className={`fixed top-4 right-4 ${bgColor} text-white px-6 py-3 rounded-lg shadow-lg z-50 max-w-sm`}
+    >
+      <div className="flex items-center justify-between">
+        <span>{message}</span>
+        <button onClick={onClose} className="ml-4 text-white hover:text-gray-200">
+          &times;
+        </button>
+      </div>
+    </motion.div>
+  );
+};
+
 const OrderForm: React.FC<Props> = ({ t, lang, isOpen, onClose, initialCart }) => {
   const [step, setStep] = useState(1);
   const [cart, setCart] = useState<{ itemId: string; qty: number }[]>(initialCart);
   const [customer, setCustomer] = useState({ name: '', phone: '', address: '', deliveryDate: '' });
   const [file, setFile] = useState<File | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'warning' } | null>(null);
 
-  // Sync initial cart if it changes (simple effect)
+  const showToast = (message: string, type: 'success' | 'error' | 'warning' = 'error') => {
+    setToast({ message, type });
+  };
+
+  // Sync initial cart if it changes
   React.useEffect(() => {
     if (initialCart.length > 0) {
-        // Merge or replace logic could go here, for now simpler is replace if empty
-        if(cart.length === 0) setCart(initialCart);
+      if (cart.length === 0) setCart(initialCart);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialCart]);
@@ -50,25 +85,148 @@ const OrderForm: React.FC<Props> = ({ t, lang, isOpen, onClose, initialCart }) =
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      setFile(e.target.files[0]);
+      const selectedFile = e.target.files[0];
+      
+      // Validate file type
+      if (!selectedFile.type.startsWith('image/')) {
+        showToast('Please select an image file', 'error');
+        return;
+      }
+
+      // Validate file size (5MB)
+      if (selectedFile.size > 5 * 1024 * 1024) {
+        showToast('File size must be less than 5MB', 'error');
+        return;
+      }
+
+      setFile(selectedFile);
+      showToast('File selected successfully!', 'success');
     }
   };
 
-  const handleSubmit = () => {
-    const orderData: OrderData = {
-      items: cart.map(c => ({ id: c.itemId, quantity: c.qty })),
-      customer,
-      paymentMethod: 'bank_transfer',
-      screenshot: file
-    };
-    console.log("Order Submitted:", orderData);
-    setStep(5);
+  const validateStep = (currentStep: number): boolean => {
+    switch (currentStep) {
+      case 1:
+        if (cart.length === 0) {
+          showToast('Please select at least one item', 'warning');
+          return false;
+        }
+        return true;
+      
+      case 2:
+        if (!customer.name.trim()) {
+          showToast('Please enter your name', 'warning');
+          return false;
+        }
+        if (!customer.phone.trim()) {
+          showToast('Please enter your phone number', 'warning');
+          return false;
+        }
+        if (!customer.deliveryDate) {
+          showToast('Please select a delivery date', 'warning');
+          return false;
+        }
+        return true;
+      
+      case 4:
+        if (!file) {
+          showToast('Please upload payment screenshot', 'warning');
+          return false;
+        }
+        return true;
+      
+      default:
+        return true;
+    }
+  };
+
+  const handleSubmit = async () => {
+    if (!validateStep(4)) return;
+
+    setIsLoading(true);
+
+    try {
+      const orderData = {
+        items: cart.map(c => ({ id: c.itemId, quantity: c.qty })),
+        customer,
+        paymentMethod: 'bank_transfer',
+        total: calculateTotal()
+      };
+
+      console.log('📦 Submitting order:', orderData);
+
+      let response;
+      let result;
+
+      if (file) {
+        // If there's a file, use the upload endpoint
+        const formData = new FormData();
+        formData.append('screenshot', file);
+        formData.append('orderData', JSON.stringify(orderData));
+
+        response = await fetch('/api/upload', {
+          method: 'POST',
+          body: formData,
+        });
+      } else {
+        // If no file, use the order endpoint directly
+        response = await fetch('/api/order', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(orderData),
+        });
+      }
+
+      result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to submit order');
+      }
+
+      if (result.success) {
+        console.log('✅ Order submitted successfully!');
+        showToast('Order submitted successfully! Munira will contact you soon.', 'success');
+        setStep(5);
+      } else {
+        throw new Error(result.error || 'Submission failed');
+      }
+
+    } catch (err) {
+      console.error('Order submission error:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Failed to submit order. Please try again.';
+      showToast(errorMessage, 'error');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleNextStep = () => {
+    if (validateStep(step)) {
+      setStep(s => s + 1);
+    }
+  };
+
+  const handleBackStep = () => {
+    setStep(s => s - 1);
   };
 
   if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50 backdrop-blur-sm">
+      {/* Toast Notification */}
+      <AnimatePresence>
+        {toast && (
+          <Toast 
+            message={toast.message} 
+            type={toast.type} 
+            onClose={() => setToast(null)} 
+          />
+        )}
+      </AnimatePresence>
+
       <motion.div 
         initial={{ opacity: 0, y: 50 }}
         animate={{ opacity: 1, y: 0 }}
@@ -114,16 +272,26 @@ const OrderForm: React.FC<Props> = ({ t, lang, isOpen, onClose, initialCart }) =
                           </div>
                         </div>
                         <div className="flex items-center gap-3">
-                          <button onClick={() => updateQty(item.id, -1)} className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center">-</button>
+                          <button 
+                            onClick={() => updateQty(item.id, -1)} 
+                            className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center transition-colors"
+                          >
+                            -
+                          </button>
                           <span className="font-bold w-6 text-center">{inCart?.qty || 0}</span>
-                          <button onClick={() => updateQty(item.id, 1)} className="w-8 h-8 rounded-full bg-primary text-accent hover:bg-opacity-80 flex items-center justify-center">+</button>
+                          <button 
+                            onClick={() => updateQty(item.id, 1)} 
+                            className="w-8 h-8 rounded-full bg-primary text-accent hover:bg-opacity-80 flex items-center justify-center transition-colors"
+                          >
+                            +
+                          </button>
                         </div>
                       </div>
                     );
                   })}
                 </div>
                 <div className="mt-6 text-right">
-                    <p className="text-xl font-bold">Total: ${calculateTotal()}</p>
+                  <p className="text-xl font-bold">Total: ${calculateTotal()}</p>
                 </div>
               </motion.div>
             )}
@@ -139,41 +307,46 @@ const OrderForm: React.FC<Props> = ({ t, lang, isOpen, onClose, initialCart }) =
               >
                 <h3 className="text-xl font-bold mb-4 text-accent">{t.order_step_2}</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">{t.label_name}</label>
-                        <input 
-                            type="text" 
-                            className="w-full p-2 border rounded-md focus:ring-2 focus:ring-primary focus:outline-none"
-                            value={customer.name}
-                            onChange={e => setCustomer({...customer, name: e.target.value})}
-                        />
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">{t.label_phone}</label>
-                        <input 
-                            type="tel" 
-                            className="w-full p-2 border rounded-md focus:ring-2 focus:ring-primary focus:outline-none"
-                            value={customer.phone}
-                            onChange={e => setCustomer({...customer, phone: e.target.value})}
-                        />
-                    </div>
-                    <div className="md:col-span-2">
-                        <label className="block text-sm font-medium text-gray-700 mb-1">{t.label_address}</label>
-                        <textarea 
-                            className="w-full p-2 border rounded-md focus:ring-2 focus:ring-primary focus:outline-none"
-                            value={customer.address}
-                            onChange={e => setCustomer({...customer, address: e.target.value})}
-                        />
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">{t.label_date}</label>
-                        <input 
-                            type="date" 
-                            className="w-full p-2 border rounded-md focus:ring-2 focus:ring-primary focus:outline-none"
-                            value={customer.deliveryDate}
-                            onChange={e => setCustomer({...customer, deliveryDate: e.target.value})}
-                        />
-                    </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">{t.label_name}</label>
+                    <input 
+                      type="text" 
+                      className="w-full p-2 border rounded-md focus:ring-2 focus:ring-primary focus:outline-none transition-colors"
+                      value={customer.name}
+                      onChange={e => setCustomer({...customer, name: e.target.value})}
+                      placeholder="Enter your full name"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">{t.label_phone}</label>
+                    <input 
+                      type="tel" 
+                      className="w-full p-2 border rounded-md focus:ring-2 focus:ring-primary focus:outline-none transition-colors"
+                      value={customer.phone}
+                      onChange={e => setCustomer({...customer, phone: e.target.value})}
+                      placeholder="Enter your phone number"
+                    />
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">{t.label_address}</label>
+                    <textarea 
+                      className="w-full p-2 border rounded-md focus:ring-2 focus:ring-primary focus:outline-none transition-colors"
+                      value={customer.address}
+                      onChange={e => setCustomer({...customer, address: e.target.value})}
+                      placeholder="Enter delivery address"
+                      rows={3}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">{t.label_date}</label>
+                    <input 
+                      type="date" 
+                      className="w-full p-2 border rounded-md focus:ring-2 focus:ring-primary focus:outline-none transition-colors"
+                      value={customer.deliveryDate}
+                      onChange={e => setCustomer({...customer, deliveryDate: e.target.value})}
+                      min={new Date().toISOString().split('T')[0]}
+                    />
+                  </div>
                 </div>
               </motion.div>
             )}
@@ -188,9 +361,14 @@ const OrderForm: React.FC<Props> = ({ t, lang, isOpen, onClose, initialCart }) =
               >
                 <h3 className="text-xl font-bold mb-4 text-accent">{t.order_step_3}</h3>
                 <div className="bg-background p-6 rounded-xl border border-secondary text-center">
-                    <p className="text-lg mb-4">{t.bank_instruction}</p>
-                    <p className="text-3xl font-bold text-accent mb-2">${calculateTotal()}</p>
-                    <p className="text-sm text-gray-500">Bank of Abyssinia / Commercial Bank of Ethiopia</p>
+                  <p className="text-lg mb-4">{t.bank_instruction}</p>
+                  <p className="text-3xl font-bold text-accent mb-2">${calculateTotal()}</p>
+                  <p className="text-sm text-gray-500">Bank of Abyssinia / Commercial Bank of Ethiopia</p>
+                  <div className="mt-4 p-4 bg-yellow-50 rounded-lg">
+                    <p className="text-sm text-yellow-700">
+                      💡 <strong>Important:</strong> Please upload the payment screenshot in the next step
+                    </p>
+                  </div>
                 </div>
               </motion.div>
             )}
@@ -205,18 +383,31 @@ const OrderForm: React.FC<Props> = ({ t, lang, isOpen, onClose, initialCart }) =
               >
                 <h3 className="text-xl font-bold mb-4 text-accent">{t.order_step_4}</h3>
                 <div className="border-2 border-dashed border-primary rounded-xl p-8 text-center bg-gray-50 hover:bg-primary/5 transition-colors relative">
-                    <input 
-                        type="file" 
-                        accept="image/*"
-                        onChange={handleFileChange}
-                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                    />
-                    <div className="flex flex-col items-center pointer-events-none">
-                        <Upload size={48} className="text-accent mb-2" />
-                        <span className="font-semibold text-accent">{file ? file.name : t.btn_upload}</span>
-                        {file && <p className="text-green-600 mt-2 text-sm"><Check size={16} className="inline"/> Ready</p>}
-                    </div>
+                  <input 
+                    type="file" 
+                    accept="image/*"
+                    onChange={handleFileChange}
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                  />
+                  <div className="flex flex-col items-center pointer-events-none">
+                    <Upload size={48} className="text-accent mb-2" />
+                    <span className="font-semibold text-accent">{file ? file.name : t.btn_upload}</span>
+                    {file ? (
+                      <p className="text-green-600 mt-2 text-sm flex items-center gap-1">
+                        <Check size={16} className="inline"/> Ready to submit
+                      </p>
+                    ) : (
+                      <p className="text-gray-500 mt-2 text-sm">Click or drag to upload payment screenshot</p>
+                    )}
+                  </div>
                 </div>
+                {file && (
+                  <div className="mt-4 p-3 bg-green-50 rounded-lg border border-green-200">
+                    <p className="text-green-700 text-sm flex items-center gap-2">
+                      <Check size={16} /> File selected: {file.name} ({(file.size / 1024 / 1024).toFixed(2)} MB)
+                    </p>
+                  </div>
+                )}
               </motion.div>
             )}
 
@@ -228,33 +419,35 @@ const OrderForm: React.FC<Props> = ({ t, lang, isOpen, onClose, initialCart }) =
                 animate={{ opacity: 1, scale: 1 }}
                 className="text-center py-8"
               >
-                 {/* Simple Confetti Particles */}
-                 {[...Array(20)].map((_, i) => (
-                   <motion.div
-                     key={i}
-                     className="absolute w-3 h-3 bg-primary rounded-full"
-                     initial={{ x: 0, y: 0, opacity: 1 }}
-                     animate={{ 
-                       x: (Math.random() - 0.5) * 400, 
-                       y: (Math.random() - 0.5) * 400,
-                       opacity: 0 
-                     }}
-                     transition={{ duration: 1.5, ease: "easeOut" }}
-                     style={{ left: '50%', top: '50%', backgroundColor: ['#F7CAC9', '#FFD700', '#6B4226'][i % 3] }}
-                   />
-                 ))}
+                {/* Simple Confetti Particles */}
+                {[...Array(20)].map((_, i) => (
+                  <motion.div
+                    key={i}
+                    className="absolute w-3 h-3 bg-primary rounded-full"
+                    initial={{ x: 0, y: 0, opacity: 1 }}
+                    animate={{ 
+                      x: (Math.random() - 0.5) * 400, 
+                      y: (Math.random() - 0.5) * 400,
+                      opacity: 0 
+                    }}
+                    transition={{ duration: 1.5, ease: "easeOut" }}
+                    style={{ left: '50%', top: '50%', backgroundColor: ['#F7CAC9', '#FFD700', '#6B4226'][i % 3] }}
+                  />
+                ))}
 
                 <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <Check size={40} className="text-green-600" />
+                  <Check size={40} className="text-green-600" />
                 </div>
                 <h3 className="text-2xl font-bold text-accent mb-2">{t.success_title}</h3>
-                <p className="text-gray-600 mb-6">{t.success_message}</p>
+                <p className="text-gray-600 mb-4">{t.success_message}</p>
+                <p className="text-sm text-gray-500 mb-6">
+                  Munira has received your order and will contact you shortly at {customer.phone}
+                </p>
                 <button 
-                    onClick={() => window.open("https://t.me/@Mesh_brnfzu", "_blank")}
-                    className="bg-[#0088cc] text-white px-6 py-3 rounded-full font-bold hover:bg-[#0077b5] transition-colors flex items-center justify-center gap-2 mx-auto"
+                  onClick={onClose}
+                  className="bg-accent text-white px-6 py-3 rounded-full font-bold hover:bg-opacity-90 transition-colors"
                 >
-                    <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-2.02-1.23-2.02-1.23s-.7-.44.02-1.16c.17-.16 3.42-3.13 3.48-3.39.01-.03.01-.15-.06-.21s-.19-.04-.27-.02c-.11.02-1.87 1.18-5.28 3.46-.49.34-.94.51-1.34.5-.44-.01-1.29-.25-1.92-.42-.77-.21-1.38-.32-1.32-.88.03-.29.43-.59 1.18-.9 4.62-2.01 7.71-3.34 9.27-3.99 2.66-1.11 3.21-1.3 3.57-1.3.08 0 .26.02.37.12.09.08.12.19.13.27-.01.07.01.27 0 .44z"/></svg>
-                    {t.telegram_btn}
+                  Close Window
                 </button>
               </motion.div>
             )}
@@ -265,24 +458,31 @@ const OrderForm: React.FC<Props> = ({ t, lang, isOpen, onClose, initialCart }) =
         {step < 5 && (
           <div className="p-6 border-t flex justify-between bg-gray-50">
             {step > 1 && (
-                <button 
-                    onClick={() => setStep(s => s - 1)}
-                    className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 flex items-center gap-2"
-                >
-                   {lang === 'ar' ? <ArrowRight size={18}/> : <ArrowLeft size={18}/>} {t.btn_back}
-                </button>
+              <button 
+                onClick={handleBackStep}
+                disabled={isLoading}
+                className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 flex items-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {lang === 'ar' ? <ArrowRight size={18}/> : <ArrowLeft size={18}/>} {t.btn_back}
+              </button>
             )}
             <div className="flex-1"></div> {/* Spacer */}
             <button 
-                onClick={() => {
-                    if (step === 1 && cart.length === 0) return alert("Please select items");
-                    if (step === 2 && (!customer.name || !customer.phone)) return alert("Please fill details");
-                    if (step === 4) handleSubmit();
-                    else setStep(s => s + 1);
-                }}
-                className="px-8 py-2 bg-accent text-white rounded-lg hover:bg-opacity-90 flex items-center gap-2 font-bold"
+              onClick={step === 4 ? handleSubmit : handleNextStep}
+              disabled={isLoading}
+              className="px-8 py-2 bg-accent text-white rounded-lg hover:bg-opacity-90 flex items-center gap-2 font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-                {step === 4 ? t.btn_submit : t.btn_next} {lang === 'ar' ? <ArrowLeft size={18}/> : <ArrowRight size={18}/>}
+              {isLoading ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  {step === 4 ? 'Submitting...' : 'Loading...'}
+                </>
+              ) : (
+                <>
+                  {step === 4 ? t.btn_submit : t.btn_next} 
+                  {lang === 'ar' ? <ArrowLeft size={18}/> : <ArrowRight size={18}/>}
+                </>
+              )}
             </button>
           </div>
         )}
