@@ -3,7 +3,7 @@ import React, { useState, useRef } from 'react';
 import { Translations, Language, MenuItem, OrderData } from '../types';
 import { MENU_ITEMS } from '../constants';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Check, Upload, Trash2, ArrowRight, ArrowLeft } from 'lucide-react';
+import { Check, Upload, Trash2, ArrowRight, ArrowLeft, Wifi, WifiOff } from 'lucide-react';
 
 interface Props {
   t: Translations[Language];
@@ -16,7 +16,7 @@ interface Props {
 // Simple toast system
 const Toast: React.FC<{ message: string; type: 'success' | 'error' | 'warning'; onClose: () => void }> = ({ message, type, onClose }) => {
   React.useEffect(() => {
-    const timer = setTimeout(onClose, 4000);
+    const timer = setTimeout(onClose, 5000); // Longer timeout for mobile
     return () => clearTimeout(timer);
   }, [onClose]);
 
@@ -34,8 +34,8 @@ const Toast: React.FC<{ message: string; type: 'success' | 'error' | 'warning'; 
       className={`fixed top-4 right-4 ${bgColor} text-white px-6 py-3 rounded-lg shadow-lg z-50 max-w-sm`}
     >
       <div className="flex items-center justify-between">
-        <span>{message}</span>
-        <button onClick={onClose} className="ml-4 text-white hover:text-gray-200">
+        <span className="text-sm">{message}</span>
+        <button onClick={onClose} className="ml-4 text-white hover:text-gray-200 text-lg">
           &times;
         </button>
       </div>
@@ -50,9 +50,31 @@ const OrderForm: React.FC<Props> = ({ t, lang, isOpen, onClose, initialCart }) =
   const [file, setFile] = useState<File | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'warning' } | null>(null);
+  const [networkStatus, setNetworkStatus] = useState<'online' | 'offline'>(navigator.onLine ? 'online' : 'offline');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const formRef = useRef<HTMLDivElement>(null);
+
+  // Network status monitoring for mobile
+  React.useEffect(() => {
+    const handleOnline = () => {
+      setNetworkStatus('online');
+      showToast('Connection restored!', 'success');
+    };
+
+    const handleOffline = () => {
+      setNetworkStatus('offline');
+      showToast('No internet connection. Please check your network.', 'error');
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
 
   const showToast = (message: string, type: 'success' | 'error' | 'warning' = 'error') => {
     setToast({ message, type });
@@ -84,7 +106,6 @@ const OrderForm: React.FC<Props> = ({ t, lang, isOpen, onClose, initialCart }) =
 
   // Mobile-optimized quantity update with touch feedback
   const updateQty = (id: string, delta: number) => {
-    // Add haptic feedback on mobile if available
     if (navigator.vibrate) {
       navigator.vibrate(10);
     }
@@ -113,13 +134,11 @@ const OrderForm: React.FC<Props> = ({ t, lang, isOpen, onClose, initialCart }) =
     if (e.target.files && e.target.files[0]) {
       const selectedFile = e.target.files[0];
       
-      // Validate file type
       if (!selectedFile.type.startsWith('image/')) {
-        showToast('Please select an image file', 'error');
+        showToast('Please select an image file (JPEG, PNG, etc.)', 'error');
         return;
       }
 
-      // Validate file size (5MB)
       if (selectedFile.size > 5 * 1024 * 1024) {
         showToast('File size must be less than 5MB', 'error');
         return;
@@ -150,7 +169,6 @@ const OrderForm: React.FC<Props> = ({ t, lang, isOpen, onClose, initialCart }) =
           return false;
         }
         
-        // Mobile-optimized phone validation
         const phoneRegex = /^[+]?[0-9\s\-()]{10,}$/;
         if (!phoneRegex.test(customer.phone.replace(/\s/g, ''))) {
           showToast('Please enter a valid phone number', 'warning');
@@ -175,8 +193,14 @@ const OrderForm: React.FC<Props> = ({ t, lang, isOpen, onClose, initialCart }) =
     }
   };
 
-  // Mobile-optimized form submission
+  // ENHANCED: Mobile-optimized form submission with better error handling
   const handleSubmit = async () => {
+    // Check network connection first
+    if (!navigator.onLine) {
+      showToast('No internet connection. Please check your network and try again.', 'error');
+      return;
+    }
+
     if (!validateStep(4)) return;
 
     setIsLoading(true);
@@ -186,53 +210,111 @@ const OrderForm: React.FC<Props> = ({ t, lang, isOpen, onClose, initialCart }) =
         items: cart.map(c => ({ id: c.itemId, quantity: c.qty })),
         customer,
         paymentMethod: 'bank_transfer',
-        total: calculateTotal()
+        total: calculateTotal(),
+        timestamp: new Date().toISOString(),
+        userAgent: navigator.userAgent
       };
 
-      console.log('📦 Submitting order:', orderData);
+      console.log('📦 Submitting order from mobile:', orderData);
 
       let response;
       let result;
 
-      if (file) {
-        // If there's a file, use the upload endpoint
-        const formData = new FormData();
-        formData.append('screenshot', file);
-        formData.append('orderData', JSON.stringify(orderData));
+      // Mobile-specific: Add timeout and retry logic
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout for mobile
 
-        response = await fetch('/api/upload', {
-          method: 'POST',
-          body: formData,
-        });
+      try {
+        if (file) {
+          const formData = new FormData();
+          formData.append('screenshot', file);
+          formData.append('orderData', JSON.stringify(orderData));
+
+          response = await fetch('/api/upload', {
+            method: 'POST',
+            body: formData,
+            signal: controller.signal,
+            headers: {
+              'Accept': 'application/json',
+            },
+          });
+        } else {
+          response = await fetch('/api/order', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+            },
+            body: JSON.stringify(orderData),
+            signal: controller.signal,
+          });
+        }
+
+        clearTimeout(timeoutId);
+
+        // Check if response is OK
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error('Server response error:', {
+            status: response.status,
+            statusText: response.statusText,
+            body: errorText
+          });
+          
+          throw new Error(`Server error: ${response.status} ${response.statusText}`);
+        }
+
+        result = await response.json();
+
+        if (result.success) {
+          console.log('✅ Order submitted successfully from mobile!');
+          showToast('Order submitted successfully! Munira will contact you soon.', 'success');
+          setStep(5);
+        } else {
+          throw new Error(result.error || 'Submission failed - no success flag');
+        }
+
+      } catch (fetchError: any) {
+        clearTimeout(timeoutId);
+        
+        if (fetchError.name === 'AbortError') {
+          throw new Error('Request timeout. Please check your internet connection and try again.');
+        }
+        throw fetchError;
+      }
+
+    } catch (err: any) {
+      console.error('📱 Mobile order submission error:', {
+        error: err,
+        message: err.message,
+        stack: err.stack
+      });
+
+      let errorMessage = 'Failed to submit order. ';
+
+      // Mobile-specific error messages
+      if (err.message.includes('Failed to fetch')) {
+        errorMessage += 'Network error. Please check your internet connection.';
+      } else if (err.message.includes('timeout')) {
+        errorMessage += 'Request took too long. Please try again.';
+      } else if (err.message.includes('Server error')) {
+        errorMessage += 'Server issue. Please try again in a moment.';
+      } else if (err.message.includes('CORS')) {
+        errorMessage += 'Browser security restriction. Please try from a different browser.';
       } else {
-        // If no file, use the order endpoint directly
-        response = await fetch('/api/order', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(orderData),
-        });
+        errorMessage += err.message || 'Please try again.';
       }
 
-      result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.error || 'Failed to submit order');
-      }
-
-      if (result.success) {
-        console.log('✅ Order submitted successfully!');
-        showToast('Order submitted successfully! Munira will contact you soon.', 'success');
-        setStep(5);
-      } else {
-        throw new Error(result.error || 'Submission failed');
-      }
-
-    } catch (err) {
-      console.error('Order submission error:', err);
-      const errorMessage = err instanceof Error ? err.message : 'Failed to submit order. Please try again.';
       showToast(errorMessage, 'error');
+      
+      // Log to console for debugging
+      console.log('🔧 Debug info:', {
+        apiEndpoint: file ? '/api/upload' : '/api/order',
+        fileSize: file?.size,
+        orderDataSize: JSON.stringify(cart).length,
+        navigatorOnline: navigator.onLine,
+        userAgent: navigator.userAgent
+      });
     } finally {
       setIsLoading(false);
     }
@@ -242,8 +324,6 @@ const OrderForm: React.FC<Props> = ({ t, lang, isOpen, onClose, initialCart }) =
   const handleNextStep = () => {
     if (validateStep(step)) {
       setStep(s => s + 1);
-      
-      // Scroll to top on step change for mobile
       if (formRef.current) {
         formRef.current.scrollTo({ top: 0, behavior: 'smooth' });
       }
@@ -252,8 +332,6 @@ const OrderForm: React.FC<Props> = ({ t, lang, isOpen, onClose, initialCart }) =
 
   const handleBackStep = () => {
     setStep(s => s - 1);
-    
-    // Scroll to top on step change for mobile
     if (formRef.current) {
       formRef.current.scrollTo({ top: 0, behavior: 'smooth' });
     }
@@ -287,13 +365,21 @@ const OrderForm: React.FC<Props> = ({ t, lang, isOpen, onClose, initialCart }) =
         animate={{ opacity: 1, y: 0 }}
         className="bg-white rounded-2xl w-full max-w-4xl max-h-[95vh] overflow-y-auto shadow-2xl flex flex-col"
         style={{ 
-          WebkitOverflowScrolling: 'touch', // Smooth scrolling on iOS
-          touchAction: 'pan-y' // Better touch handling
+          WebkitOverflowScrolling: 'touch',
+          touchAction: 'pan-y'
         }}
       >
-        {/* Header */}
+        {/* Header with Network Status */}
         <div className="p-4 sm:p-6 border-b flex justify-between items-center sticky top-0 bg-white z-10">
-          <h2 className="text-xl sm:text-2xl font-script text-accent">Order Process</h2>
+          <div className="flex items-center gap-3">
+            <h2 className="text-xl sm:text-2xl font-script text-accent">Order Process</h2>
+            {networkStatus === 'offline' && (
+              <div className="flex items-center gap-1 text-red-500 text-sm">
+                <WifiOff size={16} />
+                <span>Offline</span>
+              </div>
+            )}
+          </div>
           <button 
             onClick={onClose} 
             className="w-10 h-10 flex items-center justify-center text-gray-500 hover:text-red-500 font-bold text-xl rounded-full hover:bg-gray-100 transition-colors"
@@ -315,7 +401,7 @@ const OrderForm: React.FC<Props> = ({ t, lang, isOpen, onClose, initialCart }) =
         <div className="p-4 sm:p-6 flex-1">
           <AnimatePresence mode="wait">
             
-            {/* Step 1: Select Items - Mobile Optimized */}
+            {/* Step 1: Select Items */}
             {step === 1 && (
               <motion.div 
                 key="step1"
@@ -344,7 +430,6 @@ const OrderForm: React.FC<Props> = ({ t, lang, isOpen, onClose, initialCart }) =
                           <button 
                             onClick={() => updateQty(item.id, -1)} 
                             className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-gray-100 hover:bg-gray-200 active:bg-gray-300 flex items-center justify-center transition-colors touch-manipulation select-none text-lg font-bold"
-                            aria-label={`Decrease ${item.name[lang]} quantity`}
                           >
                             -
                           </button>
@@ -352,7 +437,6 @@ const OrderForm: React.FC<Props> = ({ t, lang, isOpen, onClose, initialCart }) =
                           <button 
                             onClick={() => updateQty(item.id, 1)} 
                             className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-primary text-accent hover:bg-opacity-80 active:bg-opacity-70 flex items-center justify-center transition-colors touch-manipulation select-none text-lg font-bold"
-                            aria-label={`Increase ${item.name[lang]} quantity`}
                           >
                             +
                           </button>
@@ -367,7 +451,7 @@ const OrderForm: React.FC<Props> = ({ t, lang, isOpen, onClose, initialCart }) =
               </motion.div>
             )}
 
-            {/* Step 2: Customer Details - Mobile Optimized */}
+            {/* Step 2: Customer Details */}
             {step === 2 && (
               <motion.div 
                 key="step2"
@@ -439,16 +523,21 @@ const OrderForm: React.FC<Props> = ({ t, lang, isOpen, onClose, initialCart }) =
                   <p className="text-base sm:text-lg mb-4">{t.bank_instruction}</p>
                   <p className="text-2xl sm:text-3xl font-bold text-accent mb-2">${calculateTotal()}</p>
                   <p className="text-sm text-gray-500">Bank of Abyssinia / Commercial Bank of Ethiopia</p>
-                  <div className="mt-4 p-3 sm:p-4 bg-yellow-50 rounded-lg">
-                    <p className="text-sm text-yellow-700">
-                      💡 <strong>Important:</strong> Please upload the payment screenshot in the next step
-                    </p>
-                  </div>
+                  
+                  {/* Mobile-specific network warning */}
+                  {networkStatus === 'offline' && (
+                    <div className="mt-4 p-3 bg-red-50 rounded-lg border border-red-200">
+                      <p className="text-red-700 text-sm flex items-center gap-2 justify-center">
+                        <WifiOff size={16} />
+                        <strong>No Internet:</strong> You need connection to submit order
+                      </p>
+                    </div>
+                  )}
                 </div>
               </motion.div>
             )}
 
-            {/* Step 4: Upload - Mobile Optimized */}
+            {/* Step 4: Upload */}
             {step === 4 && (
               <motion.div 
                 key="step4"
@@ -458,17 +547,15 @@ const OrderForm: React.FC<Props> = ({ t, lang, isOpen, onClose, initialCart }) =
               >
                 <h3 className="text-lg sm:text-xl font-bold mb-4 text-accent">{t.order_step_4}</h3>
                 
-                {/* Hidden file input */}
                 <input 
                   ref={fileInputRef}
                   type="file" 
                   accept="image/*"
                   onChange={handleFileChange}
                   className="hidden"
-                  capture="environment" // Mobile camera support
+                  capture="environment"
                 />
                 
-                {/* Custom upload area */}
                 <div 
                   onClick={triggerFileInput}
                   className="border-2 border-dashed border-primary rounded-xl p-6 sm:p-8 text-center bg-gray-50 hover:bg-primary/5 active:bg-primary/10 transition-colors cursor-pointer touch-manipulation"
@@ -501,6 +588,13 @@ const OrderForm: React.FC<Props> = ({ t, lang, isOpen, onClose, initialCart }) =
                     </button>
                   </div>
                 )}
+
+                {/* Submission warning for mobile */}
+                <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                  <p className="text-blue-700 text-sm">
+                    <strong>Mobile Tip:</strong> Ensure good internet connection before submitting.
+                  </p>
+                </div>
               </motion.div>
             )}
 
@@ -512,7 +606,6 @@ const OrderForm: React.FC<Props> = ({ t, lang, isOpen, onClose, initialCart }) =
                 animate={{ opacity: 1, scale: 1 }}
                 className="text-center py-6 sm:py-8"
               >
-                {/* Simple Confetti Particles */}
                 {[...Array(20)].map((_, i) => (
                   <motion.div
                     key={i}
@@ -547,7 +640,7 @@ const OrderForm: React.FC<Props> = ({ t, lang, isOpen, onClose, initialCart }) =
           </AnimatePresence>
         </div>
 
-        {/* Footer Navigation - Mobile Optimized */}
+        {/* Footer Navigation */}
         {step < 5 && (
           <div className="p-4 sm:p-6 border-t flex justify-between items-center bg-gray-50 gap-3">
             {step > 1 && (
@@ -562,7 +655,7 @@ const OrderForm: React.FC<Props> = ({ t, lang, isOpen, onClose, initialCart }) =
             
             <button 
               onClick={step === 4 ? handleSubmit : handleNextStep}
-              disabled={isLoading}
+              disabled={isLoading || (step === 4 && networkStatus === 'offline')}
               className="px-6 sm:px-8 py-3 bg-accent text-white rounded-xl hover:bg-opacity-90 active:bg-opacity-80 flex items-center gap-2 font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation flex-1 justify-center text-sm sm:text-base"
             >
               {isLoading ? (
