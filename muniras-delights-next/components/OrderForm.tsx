@@ -3,7 +3,7 @@ import React, { useState, useRef } from 'react';
 import { Translations, Language } from '../types';
 import { MENU_ITEMS } from '../constants';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Check, Upload, Trash2, ArrowRight, ArrowLeft, Camera, Image } from 'lucide-react';
+import { Check, Upload, Trash2, ArrowRight, ArrowLeft } from 'lucide-react';
 
 interface Props {
   t: Translations[Language];
@@ -49,10 +49,8 @@ const OrderForm: React.FC<Props> = ({ t, lang, isOpen, onClose, initialCart }) =
   const [file, setFile] = useState<File | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'warning' } | null>(null);
-  const [showUploadOptions, setShowUploadOptions] = useState(false);
 
-  const cameraInputRef = useRef<HTMLInputElement>(null);
-  const galleryInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const formRef = useRef<HTMLDivElement>(null);
 
   const showToast = (message: string, type: 'success' | 'error' | 'warning' = 'error') => {
@@ -114,21 +112,13 @@ const OrderForm: React.FC<Props> = ({ t, lang, isOpen, onClose, initialCart }) =
 
       setFile(selectedFile);
       showToast('File selected successfully!', 'success');
-      setShowUploadOptions(false);
     }
   };
 
-  // Camera upload - forces camera
-  const openCamera = () => {
-    if (cameraInputRef.current) {
-      cameraInputRef.current.click();
-    }
-  };
-
-  // Gallery upload - forces gallery
-  const openGallery = () => {
-    if (galleryInputRef.current) {
-      galleryInputRef.current.click();
+  // SIMPLE: Just trigger the file input - browser will handle gallery
+  const triggerFileInput = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.click();
     }
   };
 
@@ -165,7 +155,6 @@ const OrderForm: React.FC<Props> = ({ t, lang, isOpen, onClose, initialCart }) =
     }
   };
 
-  // Mobile-compatible API submission
   const handleSubmit = async () => {
     if (!validateStep(4)) return;
 
@@ -178,7 +167,6 @@ const OrderForm: React.FC<Props> = ({ t, lang, isOpen, onClose, initialCart }) =
         paymentMethod: 'bank_transfer',
         total: calculateTotal(),
         timestamp: new Date().toISOString(),
-        source: 'web'
       };
 
       console.log('📦 Order submission:', orderData);
@@ -444,7 +432,7 @@ const OrderForm: React.FC<Props> = ({ t, lang, isOpen, onClose, initialCart }) =
               </motion.div>
             )}
 
-            {/* Step 4: Upload - Universal Browser Support */}
+            {/* Step 4: Upload - SIMPLE GALLERY ONLY */}
             {step === 4 && (
               <motion.div 
                 key="step4"
@@ -454,86 +442,35 @@ const OrderForm: React.FC<Props> = ({ t, lang, isOpen, onClose, initialCart }) =
               >
                 <h3 className="text-lg sm:text-xl font-bold mb-4 text-accent">{t.order_step_4}</h3>
                 
-                {/* Hidden file inputs for camera and gallery */}
+                {/* SIMPLE: Single file input for gallery only */}
                 <input 
-                  ref={cameraInputRef}
+                  ref={fileInputRef}
                   type="file" 
                   accept="image/*"
                   onChange={handleFileChange}
                   className="hidden"
-                  capture="environment" // This forces camera
+                  // NO capture attribute - this opens gallery on all browsers
                 />
                 
-                <input 
-                  ref={galleryInputRef}
-                  type="file" 
-                  accept="image/*"
-                  onChange={handleFileChange}
-                  className="hidden"
-                  // No capture attribute - this will open gallery
-                />
-                
-                {/* Upload Interface */}
-                {!showUploadOptions ? (
-                  // Main upload button
-                  <div 
-                    onClick={() => setShowUploadOptions(true)}
-                    className="border-2 border-dashed border-primary rounded-xl p-6 sm:p-8 text-center bg-gray-50 hover:bg-primary/5 cursor-pointer transition-colors mb-4"
-                  >
-                    <div className="flex flex-col items-center">
-                      <Upload size={40} className="text-accent mb-3" />
-                      <span className="font-semibold text-accent text-base sm:text-lg">
-                        {file ? file.name : 'Upload Payment Proof'}
-                      </span>
-                      {file ? (
-                        <p className="text-green-600 mt-2 text-sm flex items-center gap-1">
-                          <Check size={16} className="inline"/> Ready to submit
-                        </p>
-                      ) : (
-                        <div className="mt-2">
-                          <p className="text-gray-500 text-sm">Tap to choose upload method</p>
-                          <p className="text-gray-400 text-xs mt-1">Works on all browsers</p>
-                        </div>
-                      )}
-                    </div>
+                {/* Simple upload button */}
+                <div 
+                  onClick={triggerFileInput}
+                  className="border-2 border-dashed border-primary rounded-xl p-6 sm:p-8 text-center bg-gray-50 hover:bg-primary/5 cursor-pointer transition-colors mb-4"
+                >
+                  <div className="flex flex-col items-center">
+                    <Upload size={40} className="text-accent mb-3" />
+                    <span className="font-semibold text-accent text-base sm:text-lg">
+                      {file ? file.name : 'Upload Payment Proof'}
+                    </span>
+                    {file ? (
+                      <p className="text-green-600 mt-2 text-sm flex items-center gap-1">
+                        <Check size={16} className="inline"/> Ready to submit
+                      </p>
+                    ) : (
+                      <p className="text-gray-500 mt-2 text-sm">Tap to select from gallery</p>
+                    )}
                   </div>
-                ) : (
-                  // Upload options
-                  <div className="space-y-3 mb-4">
-                    <button
-                      onClick={openCamera}
-                      className="w-full p-4 border-2 border-primary rounded-xl bg-white hover:bg-primary/5 flex items-center gap-3 transition-colors active:scale-95"
-                    >
-                      <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center">
-                        <Camera size={24} className="text-accent" />
-                      </div>
-                      <div className="text-left flex-1">
-                        <p className="font-semibold text-gray-800">Take Photo</p>
-                        <p className="text-sm text-gray-600">Use your camera to take a new photo</p>
-                      </div>
-                    </button>
-                    
-                    <button
-                      onClick={openGallery}
-                      className="w-full p-4 border-2 border-gray-300 rounded-xl bg-white hover:bg-gray-50 flex items-center gap-3 transition-colors active:scale-95"
-                    >
-                      <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center">
-                        <Image size={24} className="text-gray-600" />
-                      </div>
-                      <div className="text-left flex-1">
-                        <p className="font-semibold text-gray-800">Choose from Gallery</p>
-                        <p className="text-sm text-gray-600">Select an existing photo from your device</p>
-                      </div>
-                    </button>
-
-                    <button
-                      onClick={() => setShowUploadOptions(false)}
-                      className="w-full p-3 text-gray-500 hover:text-gray-700 transition-colors text-sm"
-                    >
-                      ← Back
-                    </button>
-                  </div>
-                )}
+                </div>
                 
                 {/* File info */}
                 {file && (
@@ -549,13 +486,6 @@ const OrderForm: React.FC<Props> = ({ t, lang, isOpen, onClose, initialCart }) =
                     </button>
                   </div>
                 )}
-
-                {/* Help text */}
-                <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
-                  <p className="text-blue-700 text-sm">
-                    <strong>Universal Support:</strong> Works on Chrome, Telegram, Safari, and all browsers
-                  </p>
-                </div>
               </motion.div>
             )}
 
