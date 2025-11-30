@@ -3,7 +3,7 @@ import React, { useState, useRef } from 'react';
 import { Translations, Language } from '../types';
 import { MENU_ITEMS } from '../constants';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Check, Upload, Trash2, ArrowRight, ArrowLeft } from 'lucide-react';
+import { Check, Upload, Trash2, ArrowRight, ArrowLeft, Camera, Image } from 'lucide-react';
 
 interface Props {
   t: Translations[Language];
@@ -49,8 +49,10 @@ const OrderForm: React.FC<Props> = ({ t, lang, isOpen, onClose, initialCart }) =
   const [file, setFile] = useState<File | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'warning' } | null>(null);
+  const [showUploadOptions, setShowUploadOptions] = useState(false);
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const galleryInputRef = useRef<HTMLInputElement>(null);
   const formRef = useRef<HTMLDivElement>(null);
 
   const showToast = (message: string, type: 'success' | 'error' | 'warning' = 'error') => {
@@ -101,7 +103,7 @@ const OrderForm: React.FC<Props> = ({ t, lang, isOpen, onClose, initialCart }) =
       const selectedFile = e.target.files[0];
       
       if (!selectedFile.type.startsWith('image/')) {
-        showToast('Please select an image file', 'error');
+        showToast('Please select an image file (JPEG, PNG, etc.)', 'error');
         return;
       }
 
@@ -112,6 +114,21 @@ const OrderForm: React.FC<Props> = ({ t, lang, isOpen, onClose, initialCart }) =
 
       setFile(selectedFile);
       showToast('File selected successfully!', 'success');
+      setShowUploadOptions(false);
+    }
+  };
+
+  // Camera upload - forces camera
+  const openCamera = () => {
+    if (cameraInputRef.current) {
+      cameraInputRef.current.click();
+    }
+  };
+
+  // Gallery upload - forces gallery
+  const openGallery = () => {
+    if (galleryInputRef.current) {
+      galleryInputRef.current.click();
     }
   };
 
@@ -148,7 +165,7 @@ const OrderForm: React.FC<Props> = ({ t, lang, isOpen, onClose, initialCart }) =
     }
   };
 
-  // FIXED: Mobile-compatible API submission
+  // Mobile-compatible API submission
   const handleSubmit = async () => {
     if (!validateStep(4)) return;
 
@@ -161,16 +178,13 @@ const OrderForm: React.FC<Props> = ({ t, lang, isOpen, onClose, initialCart }) =
         paymentMethod: 'bank_transfer',
         total: calculateTotal(),
         timestamp: new Date().toISOString(),
-        source: 'mobile-web'
+        source: 'web'
       };
 
-      console.log('📱 Mobile order submission:', orderData);
+      console.log('📦 Order submission:', orderData);
 
-      // FIX: Use absolute URL for mobile compatibility
       const baseUrl = window.location.origin;
       let endpoint = '/api/upload';
-      
-      // Mobile fix: Try different endpoints with better error handling
       let response;
       let result;
 
@@ -179,12 +193,11 @@ const OrderForm: React.FC<Props> = ({ t, lang, isOpen, onClose, initialCart }) =
         formData.append('screenshot', file);
         formData.append('orderData', JSON.stringify(orderData));
 
-        // Try with absolute URL first (fixes mobile CORS issues)
+        // Try with absolute URL first
         try {
           response = await fetch(`${baseUrl}${endpoint}`, {
             method: 'POST',
             body: formData,
-            // Mobile-friendly headers
             headers: {
               'Accept': 'application/json',
             },
@@ -218,23 +231,15 @@ const OrderForm: React.FC<Props> = ({ t, lang, isOpen, onClose, initialCart }) =
         }
       }
 
-      // Handle response
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('Mobile submission error:', {
-          status: response.status,
-          statusText: response.statusText,
-          endpoint,
-          error: errorText
-        });
-        
         throw new Error(`Server error: ${response.status}`);
       }
 
       result = await response.json();
 
       if (result.success) {
-        console.log('✅ Mobile order successful!');
+        console.log('✅ Order submitted successfully!');
         showToast('Order submitted successfully! Munira will contact you soon.', 'success');
         setStep(5);
       } else {
@@ -242,29 +247,17 @@ const OrderForm: React.FC<Props> = ({ t, lang, isOpen, onClose, initialCart }) =
       }
 
     } catch (err: any) {
-      console.error('📱 Mobile submission failed:', err);
+      console.error('Order submission failed:', err);
       
-      // Better mobile-specific error messages
       let errorMessage = 'Order submission failed. ';
       
       if (err.message.includes('Failed to fetch')) {
-        errorMessage += 'Network issue detected. ';
-        errorMessage += 'Please check your internet connection and try again.';
-      } else if (err.message.includes('CORS')) {
-        errorMessage += 'Browser security restriction. ';
-        errorMessage += 'Please try from a different browser or use WiFi.';
+        errorMessage += 'Network issue detected. Please check your internet connection.';
       } else {
         errorMessage += err.message || 'Please try again.';
       }
       
       showToast(errorMessage, 'error');
-      
-      // Debug info
-      console.log('🔧 Mobile debug info:', {
-        online: navigator.onLine,
-        userAgent: navigator.userAgent,
-        platform: navigator.platform
-      });
     } finally {
       setIsLoading(false);
     }
@@ -284,10 +277,6 @@ const OrderForm: React.FC<Props> = ({ t, lang, isOpen, onClose, initialCart }) =
     if (formRef.current) {
       formRef.current.scrollTo({ top: 0, behavior: 'smooth' });
     }
-  };
-
-  const triggerFileInput = () => {
-    fileInputRef.current?.click();
   };
 
   if (!isOpen) return null;
@@ -455,7 +444,7 @@ const OrderForm: React.FC<Props> = ({ t, lang, isOpen, onClose, initialCart }) =
               </motion.div>
             )}
 
-            {/* Step 4: Upload */}
+            {/* Step 4: Upload - Universal Browser Support */}
             {step === 4 && (
               <motion.div 
                 key="step4"
@@ -465,34 +454,88 @@ const OrderForm: React.FC<Props> = ({ t, lang, isOpen, onClose, initialCart }) =
               >
                 <h3 className="text-lg sm:text-xl font-bold mb-4 text-accent">{t.order_step_4}</h3>
                 
+                {/* Hidden file inputs for camera and gallery */}
                 <input 
-                  ref={fileInputRef}
+                  ref={cameraInputRef}
                   type="file" 
                   accept="image/*"
                   onChange={handleFileChange}
                   className="hidden"
-                  capture="environment"
+                  capture="environment" // This forces camera
                 />
                 
-                <div 
-                  onClick={triggerFileInput}
-                  className="border-2 border-dashed border-primary rounded-xl p-6 sm:p-8 text-center bg-gray-50 hover:bg-primary/5 cursor-pointer transition-colors mb-4"
-                >
-                  <div className="flex flex-col items-center">
-                    <Upload size={40} className="text-accent mb-3" />
-                    <span className="font-semibold text-accent text-base sm:text-lg">
-                      {file ? file.name : t.btn_upload}
-                    </span>
-                    {file ? (
-                      <p className="text-green-600 mt-2 text-sm flex items-center gap-1">
-                        <Check size={16} className="inline"/> Ready to submit
-                      </p>
-                    ) : (
-                      <p className="text-gray-500 mt-2 text-sm">Tap to upload payment screenshot</p>
-                    )}
-                  </div>
-                </div>
+                <input 
+                  ref={galleryInputRef}
+                  type="file" 
+                  accept="image/*"
+                  onChange={handleFileChange}
+                  className="hidden"
+                  // No capture attribute - this will open gallery
+                />
                 
+                {/* Upload Interface */}
+                {!showUploadOptions ? (
+                  // Main upload button
+                  <div 
+                    onClick={() => setShowUploadOptions(true)}
+                    className="border-2 border-dashed border-primary rounded-xl p-6 sm:p-8 text-center bg-gray-50 hover:bg-primary/5 cursor-pointer transition-colors mb-4"
+                  >
+                    <div className="flex flex-col items-center">
+                      <Upload size={40} className="text-accent mb-3" />
+                      <span className="font-semibold text-accent text-base sm:text-lg">
+                        {file ? file.name : 'Upload Payment Proof'}
+                      </span>
+                      {file ? (
+                        <p className="text-green-600 mt-2 text-sm flex items-center gap-1">
+                          <Check size={16} className="inline"/> Ready to submit
+                        </p>
+                      ) : (
+                        <div className="mt-2">
+                          <p className="text-gray-500 text-sm">Tap to choose upload method</p>
+                          <p className="text-gray-400 text-xs mt-1">Works on all browsers</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  // Upload options
+                  <div className="space-y-3 mb-4">
+                    <button
+                      onClick={openCamera}
+                      className="w-full p-4 border-2 border-primary rounded-xl bg-white hover:bg-primary/5 flex items-center gap-3 transition-colors active:scale-95"
+                    >
+                      <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center">
+                        <Camera size={24} className="text-accent" />
+                      </div>
+                      <div className="text-left flex-1">
+                        <p className="font-semibold text-gray-800">Take Photo</p>
+                        <p className="text-sm text-gray-600">Use your camera to take a new photo</p>
+                      </div>
+                    </button>
+                    
+                    <button
+                      onClick={openGallery}
+                      className="w-full p-4 border-2 border-gray-300 rounded-xl bg-white hover:bg-gray-50 flex items-center gap-3 transition-colors active:scale-95"
+                    >
+                      <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center">
+                        <Image size={24} className="text-gray-600" />
+                      </div>
+                      <div className="text-left flex-1">
+                        <p className="font-semibold text-gray-800">Choose from Gallery</p>
+                        <p className="text-sm text-gray-600">Select an existing photo from your device</p>
+                      </div>
+                    </button>
+
+                    <button
+                      onClick={() => setShowUploadOptions(false)}
+                      className="w-full p-3 text-gray-500 hover:text-gray-700 transition-colors text-sm"
+                    >
+                      ← Back
+                    </button>
+                  </div>
+                )}
+                
+                {/* File info */}
                 {file && (
                   <div className="p-3 bg-green-50 rounded-lg border border-green-200 mb-4">
                     <p className="text-green-700 text-sm flex items-center gap-2">
@@ -507,9 +550,10 @@ const OrderForm: React.FC<Props> = ({ t, lang, isOpen, onClose, initialCart }) =
                   </div>
                 )}
 
+                {/* Help text */}
                 <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
                   <p className="text-blue-700 text-sm">
-                    <strong>Mobile Tip:</strong> Use WiFi for faster upload if possible.
+                    <strong>Universal Support:</strong> Works on Chrome, Telegram, Safari, and all browsers
                   </p>
                 </div>
               </motion.div>
