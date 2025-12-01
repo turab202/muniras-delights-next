@@ -51,9 +51,6 @@ const OrderForm: React.FC<Props> = ({ t, lang, isOpen, onClose, initialCart }) =
   const [isLoading, setIsLoading] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'warning' } | null>(null);
 
-  // Check if user is in Telegram
-  const isTelegram = typeof window !== 'undefined' && /Telegram/.test(navigator.userAgent);
-
   const showToast = (message: string, type: 'success' | 'error' | 'warning' = 'error') => {
     setToast({ message, type });
   };
@@ -96,9 +93,9 @@ const OrderForm: React.FC<Props> = ({ t, lang, isOpen, onClose, initialCart }) =
         return;
       }
 
-      // Validate file size (3MB for mobile compatibility)
-      if (selectedFile.size > 3 * 1024 * 1024) {
-        showToast('File size must be less than 3MB', 'error');
+      // Validate file size (5MB)
+      if (selectedFile.size > 5 * 1024 * 1024) {
+        showToast('File size must be less than 5MB', 'error');
         return;
       }
 
@@ -132,8 +129,7 @@ const OrderForm: React.FC<Props> = ({ t, lang, isOpen, onClose, initialCart }) =
         return true;
       
       case 4:
-        // In Telegram, file is optional
-        if (!file && !isTelegram) {
+        if (!file) {
           showToast('Please upload payment screenshot', 'warning');
           return false;
         }
@@ -154,42 +150,16 @@ const OrderForm: React.FC<Props> = ({ t, lang, isOpen, onClose, initialCart }) =
         items: cart.map(c => ({ id: c.itemId, quantity: c.qty })),
         customer,
         paymentMethod: 'bank_transfer',
-        total: calculateTotal(),
-        userAgent: navigator.userAgent,
-        timestamp: new Date().toISOString()
+        total: calculateTotal()
       };
 
-      console.log('📦 Submitting order, Telegram:', isTelegram);
+      console.log('📦 Submitting order:', orderData);
 
       let response;
+      let result;
 
-      if (isTelegram && file) {
-        // Telegram browser: convert file to base64
-        console.log('📱 Telegram detected, using base64 upload');
-        
-        const base64 = await new Promise<string>((resolve) => {
-          const reader = new FileReader();
-          reader.onloadend = () => {
-            if (typeof reader.result === 'string') {
-              resolve(reader.result);
-            }
-          };
-          reader.readAsDataURL(file);
-        });
-
-        response = await fetch('/api/upload', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            orderData,
-            screenshot: base64,
-            isTelegram: true
-          }),
-        });
-      } else if (file) {
-        // Regular browser: use FormData
+      if (file) {
+        // If there's a file, use the upload endpoint
         const formData = new FormData();
         formData.append('screenshot', file);
         formData.append('orderData', JSON.stringify(orderData));
@@ -199,34 +169,34 @@ const OrderForm: React.FC<Props> = ({ t, lang, isOpen, onClose, initialCart }) =
           body: formData,
         });
       } else {
-        // No file case
-        response = await fetch('/api/upload', {
+        // If no file, use the order endpoint directly
+        response = await fetch('/api/order', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ orderData }),
+          body: JSON.stringify(orderData),
         });
       }
 
-      const result = await response.json();
+      result = await response.json();
 
-      if (!response.ok && !result.success) {
+      if (!response.ok) {
         throw new Error(result.error || 'Failed to submit order');
       }
 
-      console.log('✅ Order response:', result);
-      
-      // Always show success to user
-      showToast(result.message || 'Order submitted successfully! Munira will contact you soon.', 'success');
-      setStep(5);
+      if (result.success) {
+        console.log('✅ Order submitted successfully!');
+        showToast('Order submitted successfully! Munira will contact you soon.', 'success');
+        setStep(5);
+      } else {
+        throw new Error(result.error || 'Submission failed');
+      }
 
     } catch (err) {
       console.error('Order submission error:', err);
-      
-      // Even if there's an error, show success to user
-      showToast('Order received! Our team will contact you shortly.', 'success');
-      setStep(5);
+      const errorMessage = err instanceof Error ? err.message : 'Failed to submit order. Please try again.';
+      showToast(errorMessage, 'error');
     } finally {
       setIsLoading(false);
     }
@@ -257,13 +227,6 @@ const OrderForm: React.FC<Props> = ({ t, lang, isOpen, onClose, initialCart }) =
         )}
       </AnimatePresence>
 
-      {/* Telegram info badge - only shows in Telegram */}
-      {isTelegram && (
-        <div className="fixed top-4 left-4 bg-blue-100 border border-blue-300 text-blue-800 px-3 py-1 rounded-full text-sm z-50">
-          📱 Telegram
-        </div>
-      )}
-
       <motion.div 
         initial={{ opacity: 0, y: 50 }}
         animate={{ opacity: 1, y: 0 }}
@@ -271,9 +234,7 @@ const OrderForm: React.FC<Props> = ({ t, lang, isOpen, onClose, initialCart }) =
       >
         {/* Header */}
         <div className="p-6 border-b flex justify-between items-center sticky top-0 bg-white z-10">
-          <h2 className="text-2xl font-script text-accent">
-            {isTelegram ? 'Order Form (Mobile)' : 'Order Process'}
-          </h2>
+          <h2 className="text-2xl font-script text-accent">Order Process</h2>
           <button onClick={onClose} className="text-gray-500 hover:text-red-500 font-bold text-xl">&times;</button>
         </div>
 
@@ -403,15 +364,11 @@ const OrderForm: React.FC<Props> = ({ t, lang, isOpen, onClose, initialCart }) =
                   <p className="text-lg mb-4">{t.bank_instruction}</p>
                   <p className="text-3xl font-bold text-accent mb-2">${calculateTotal()}</p>
                   <p className="text-sm text-gray-500">Bank of Abyssinia / Commercial Bank of Ethiopia</p>
-                  
-                  {/* Show different message for Telegram */}
-                  {isTelegram && (
-                    <div className="mt-4 p-4 bg-green-50 rounded-lg border border-green-200">
-                      <p className="text-sm text-green-700">
-                        📱 <strong>Mobile Friendly:</strong> You can upload payment screenshot in next step
-                      </p>
-                    </div>
-                  )}
+                  <div className="mt-4 p-4 bg-yellow-50 rounded-lg">
+                    <p className="text-sm text-yellow-700">
+                      💡 <strong>Important:</strong> Please upload the payment screenshot in the next step
+                    </p>
+                  </div>
                 </div>
               </motion.div>
             )}
@@ -424,18 +381,7 @@ const OrderForm: React.FC<Props> = ({ t, lang, isOpen, onClose, initialCart }) =
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -20 }}
               >
-                <h3 className="text-xl font-bold mb-4 text-accent">
-                  {isTelegram ? 'Upload Payment (Optional)' : t.order_step_4}
-                </h3>
-                
-                {isTelegram && (
-                  <div className="mb-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
-                    <p className="text-sm text-blue-700">
-                      📱 <strong>Telegram Browser:</strong> You can upload payment screenshot or skip and send it later
-                    </p>
-                  </div>
-                )}
-                
+                <h3 className="text-xl font-bold mb-4 text-accent">{t.order_step_4}</h3>
                 <div className="border-2 border-dashed border-primary rounded-xl p-8 text-center bg-gray-50 hover:bg-primary/5 transition-colors relative">
                   <input 
                     type="file" 
@@ -445,29 +391,16 @@ const OrderForm: React.FC<Props> = ({ t, lang, isOpen, onClose, initialCart }) =
                   />
                   <div className="flex flex-col items-center pointer-events-none">
                     <Upload size={48} className="text-accent mb-2" />
-                    <span className="font-semibold text-accent">
-                      {file ? file.name : (isTelegram ? 'Tap to upload (Optional)' : t.btn_upload)}
-                    </span>
+                    <span className="font-semibold text-accent">{file ? file.name : t.btn_upload}</span>
                     {file ? (
                       <p className="text-green-600 mt-2 text-sm flex items-center gap-1">
                         <Check size={16} className="inline"/> Ready to submit
                       </p>
                     ) : (
-                      <p className="text-gray-500 mt-2 text-sm">
-                        {isTelegram ? 'Payment screenshot (JPG, PNG)' : 'Click or drag to upload payment screenshot'}
-                      </p>
+                      <p className="text-gray-500 mt-2 text-sm">Click or drag to upload payment screenshot</p>
                     )}
                   </div>
                 </div>
-                
-                {isTelegram && !file && (
-                  <div className="mt-4 p-4 bg-yellow-50 rounded-lg border border-yellow-200">
-                    <p className="text-sm text-yellow-700">
-                      💡 <strong>Note:</strong> You can skip upload and send payment screenshot to Munira directly on WhatsApp/Telegram
-                    </p>
-                  </div>
-                )}
-                
                 {file && (
                   <div className="mt-4 p-3 bg-green-50 rounded-lg border border-green-200">
                     <p className="text-green-700 text-sm flex items-center gap-2">
@@ -505,35 +438,11 @@ const OrderForm: React.FC<Props> = ({ t, lang, isOpen, onClose, initialCart }) =
                 <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
                   <Check size={40} className="text-green-600" />
                 </div>
-                <h3 className="text-2xl font-bold text-accent mb-2">Order Confirmed! 🎉</h3>
-                
-                {isTelegram ? (
-                  <>
-                    <p className="text-gray-600 mb-4">
-                      ✅ Your order has been received successfully!
-                    </p>
-                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6 max-w-md mx-auto">
-                      <p className="text-blue-800 font-bold mb-2">Order Details:</p>
-                      <p className="text-blue-700 text-sm">
-                        • <strong>Name:</strong> {customer.name}<br/>
-                        • <strong>Phone:</strong> {customer.phone}<br/>
-                        • <strong>Total:</strong> ${calculateTotal()}<br/>
-                        • <strong>Delivery:</strong> {customer.deliveryDate}
-                      </p>
-                    </div>
-                    <p className="text-sm text-gray-500 mb-6">
-                      Munira will contact you at {customer.phone} to confirm your order.
-                    </p>
-                  </>
-                ) : (
-                  <>
-                    <p className="text-gray-600 mb-4">Order submitted successfully! Munira will contact you soon.</p>
-                    <p className="text-sm text-gray-500 mb-6">
-                      Munira has received your order and will contact you shortly at {customer.phone}
-                    </p>
-                  </>
-                )}
-                
+                <h3 className="text-2xl font-bold text-accent mb-2">{t.success_title}</h3>
+                <p className="text-gray-600 mb-4">{t.success_message}</p>
+                <p className="text-sm text-gray-500 mb-6">
+                  Munira has received your order and will contact you shortly at {customer.phone}
+                </p>
                 <button 
                   onClick={onClose}
                   className="bg-accent text-white px-6 py-3 rounded-full font-bold hover:bg-opacity-90 transition-colors"
@@ -570,7 +479,7 @@ const OrderForm: React.FC<Props> = ({ t, lang, isOpen, onClose, initialCart }) =
                 </>
               ) : (
                 <>
-                  {step === 4 ? 'Complete Order' : t.btn_next} 
+                  {step === 4 ? t.btn_submit : t.btn_next} 
                   {lang === 'ar' ? <ArrowLeft size={18}/> : <ArrowRight size={18}/>}
                 </>
               )}
