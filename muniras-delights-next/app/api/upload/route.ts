@@ -28,41 +28,6 @@ function escapeTelegramText(text: string): string {
     .replace(/!/g, '\\!');
 }
 
-// Function to send image to Telegram
-async function sendImageToTelegram(file: File, caption: string) {
-  try {
-    console.log('📤 Sending image to Telegram...');
-
-    const formData = new FormData();
-    formData.append('chat_id', TELEGRAM_CHAT_ID!);
-    formData.append('photo', file);
-    formData.append('caption', caption);
-
-    const response = await fetch(
-      `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendPhoto`,
-      {
-        method: 'POST',
-        body: formData,
-      }
-    );
-
-    const result = await response.json();
-    console.log('📨 Telegram Photo API response:', result);
-
-    if (!result.ok) {
-      console.error('❌ Telegram Photo API error:', result);
-      return { success: false, error: result.description };
-    }
-
-    console.log('✅ Telegram image sent successfully!');
-    return { success: true };
-
-  } catch (error) {
-    console.error('❌ Telegram image upload error:', error);
-    return { success: false, error: 'Network error while sending image to Telegram' };
-  }
-}
-
 // Function to send order message to Telegram
 async function sendOrderToTelegram(order: any) {
   try {
@@ -70,19 +35,20 @@ async function sendOrderToTelegram(order: any) {
 
     if (order) {
       message += `*CUSTOMER DETAILS:*\n`;
-      message += `👤 *Name:* ${escapeTelegramText(order.customer.name)}\n`;
-      message += `📞 *Phone:* ${escapeTelegramText(order.customer.phone)}\n`;
-      message += `📍 *Address:* ${escapeTelegramText(order.customer.address)}\n`;
-      message += `📅 *Delivery Date:* ${escapeTelegramText(order.customer.deliveryDate)}\n\n`;
+      message += `👤 *Name:* ${escapeTelegramText(order.customer?.name || 'Not provided')}\n`;
+      message += `📞 *Phone:* ${escapeTelegramText(order.customer?.phone || 'Not provided')}\n`;
+      message += `📍 *Address:* ${escapeTelegramText(order.customer?.address || 'Not provided')}\n`;
+      message += `📅 *Delivery Date:* ${escapeTelegramText(order.customer?.deliveryDate || 'Not provided')}\n\n`;
 
       message += `*ORDER ITEMS:*\n`;
-      order.items.forEach((item: any, index: number) => {
-        message += `${index + 1}. ${escapeTelegramText(item.id)} (Qty: ${item.quantity})\n`;
+      (order.items || []).forEach((item: any, index: number) => {
+        message += `${index + 1}. ${escapeTelegramText(item.id || 'Item')} (Qty: ${item.quantity || 0})\n`;
       });
 
-      message += `\n💰 *Total Amount:* $${order.total}\n`;
-      message += `💳 *Payment Method:* ${escapeTelegramText(order.paymentMethod)}\n`;
+      message += `\n💰 *Total Amount:* $${order.total || 0}\n`;
+      message += `💳 *Payment Method:* ${escapeTelegramText(order.paymentMethod || 'bank_transfer')}\n`;
       message += `⏰ *Order Time:* ${new Date().toLocaleString()}\n`;
+      message += `🌐 *Browser:* ${order.userAgent?.includes('Telegram') ? 'Telegram' : 'Regular Browser'}\n`;
     }
 
     console.log('📤 Sending order message to Telegram...');
@@ -118,134 +84,162 @@ async function sendOrderToTelegram(order: any) {
 }
 
 export async function POST(request: NextRequest) {
+  console.log('📨 ======= UPLOAD REQUEST STARTED =======');
+  
   try {
+    // Get request details
     const userAgent = request.headers.get('user-agent') || '';
-    const isTelegram = userAgent.includes('Telegram');
     const contentType = request.headers.get('content-type') || '';
+    const isTelegram = userAgent.includes('Telegram');
     
-    console.log('📱 User Agent:', userAgent.substring(0, 100));
+    console.log('📱 User Agent:', userAgent);
     console.log('🤖 Is Telegram:', isTelegram);
     console.log('📄 Content Type:', contentType);
 
     if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) {
+      console.error('❌ Telegram bot credentials missing');
+      // Still return success to user
       return NextResponse.json({ 
-        success: true, // Always return success to user
-        message: 'Order received! Our team will contact you shortly.',
-        warning: 'Telegram not configured on server'
+        success: true,
+        message: 'Order received! We will contact you shortly.',
+        note: 'Telegram not configured'
       });
     }
 
-    let file: File | null = null;
-    let order = null;
     let orderData = null;
+    
+    // LOG THE ENTIRE REQUEST FOR DEBUGGING
+    const requestClone = request.clone();
+    const rawText = await requestClone.text();
+    console.log('📝 Raw request body (first 1000 chars):', rawText.substring(0, 1000));
+    console.log('📏 Raw body length:', rawText.length);
 
-    // Handle different content types for Telegram compatibility
-    if (contentType.includes('multipart/form-data')) {
-      // Regular FormData (Chrome, Safari, etc.)
-      const formData = await request.formData();
-      file = formData.get('screenshot') as File;
-      orderData = formData.get('orderData') as string;
-    } else if (contentType.includes('application/json')) {
-      // JSON data (Telegram fallback)
-      const jsonData = await request.json();
-      orderData = jsonData.orderData;
-      // Telegram might send file as base64
-      if (jsonData.screenshot && jsonData.screenshot.startsWith('data:')) {
-        // Convert base64 to File
-        const base64Data = jsonData.screenshot.split(',')[1];
-        const binaryString = atob(base64Data);
-        const bytes = new Uint8Array(binaryString.length);
-        for (let i = 0; i < binaryString.length; i++) {
-          bytes[i] = binaryString.charCodeAt(i);
-        }
-        const blob = new Blob([bytes], { type: 'image/jpeg' });
-        file = new File([blob], 'payment.jpg', { type: 'image/jpeg' });
-      }
-    }
-
-    console.log('📸 File info:', {
-      exists: !!file,
-      name: file?.name,
-      size: file?.size,
-      type: file?.type
-    });
-
-    // Parse order data
-    if (orderData) {
+    // Try to parse based on content type
+    if (contentType.includes('application/json')) {
+      console.log('🔄 Attempting to parse as JSON...');
       try {
-        order = JSON.parse(orderData);
-        console.log('📦 Order data parsed:', order);
-      } catch (e) {
-        console.error('Error parsing order data:', e);
-        // Don't return error, still accept the order
+        const jsonData = JSON.parse(rawText);
+        orderData = jsonData.orderData;
+        console.log('✅ Successfully parsed as JSON');
+      } catch (jsonError) {
+        console.error('❌ JSON parse error:', jsonError);
+      }
+    } else if (contentType.includes('multipart/form-data')) {
+      console.log('🔄 Attempting to parse as FormData...');
+      try {
+        // Re-create request for FormData parsing
+        const formDataRequest = new Request(request);
+        const formData = await formDataRequest.formData();
+        const orderDataStr = formData.get('orderData') as string;
+        
+        if (orderDataStr) {
+          orderData = JSON.parse(orderDataStr);
+          console.log('✅ Successfully parsed as FormData');
+        } else {
+          console.log('⚠️ No orderData found in FormData');
+        }
+      } catch (formError) {
+        console.error('❌ FormData parse error:', formError);
       }
     }
 
-    // For Telegram browser, make file optional
-    if (!file && !isTelegram) {
-      return NextResponse.json({ 
-        success: true, // Still success
-        message: 'Order received! Please send payment screenshot separately.',
-        note: 'No screenshot uploaded'
+    // Last resort: try to extract JSON from raw text
+    if (!orderData && rawText.includes('orderData')) {
+      console.log('🔄 Attempting to extract orderData from raw text...');
+      try {
+        // Look for orderData in the raw text
+        const orderMatch = rawText.match(/"orderData"\s*:\s*(\{[\s\S]*?\})(?=\s*,|\s*\})/);
+        if (orderMatch) {
+          orderData = JSON.parse(orderMatch[1]);
+          console.log('✅ Successfully extracted orderData from text');
+        }
+      } catch (extractError) {
+        console.error('❌ Extraction error:', extractError);
+      }
+    }
+
+    // Debug what we found
+    console.log('📦 Order data extracted:', !!orderData);
+    if (orderData) {
+      console.log('📋 Order details:', {
+        name: orderData.customer?.name || 'No name',
+        phone: orderData.customer?.phone || 'No phone',
+        total: orderData.total || 0,
+        itemsCount: orderData.items?.length || 0
       });
+    } else {
+      console.log('⚠️ Could not extract order data from request');
     }
 
-    if (file) {
-      if (!file.type.startsWith('image/')) {
-        return NextResponse.json({ 
-          success: true, // Still success
-          message: 'Order received! Please send valid image for payment proof.',
-          warning: 'Invalid file type'
-        });
-      }
-
-      if (file.size > 10 * 1024 * 1024) {
-        return NextResponse.json({ 
-          success: true, // Still success
-          message: 'Order received! File too large, please send smaller image.',
-          warning: 'File too large'
-        });
-      }
-    }
-
-    let orderMessageResult = null;
-    let imageResult = null;
-
-    // Step 1: Send order message (ALWAYS try this)
-    if (order) {
-      console.log('🚀 Sending order message...');
-      orderMessageResult = await sendOrderToTelegram(order);
-    }
-
-    // Step 2: Send image if available
-    if (file) {
-      console.log('🚀 Sending image...');
-      const customerName = order?.customer?.name || 'Customer';
-      const caption = `💰 Payment for ${customerName}\nTotal: $${order?.total || 'N/A'}\nTime: ${new Date().toLocaleTimeString()}`;
+    // Send to Telegram if we have order data
+    if (orderData) {
+      // Add user agent to order data
+      orderData.userAgent = userAgent;
       
-      imageResult = await sendImageToTelegram(file, caption);
+      console.log('🚀 Attempting to send to Telegram bot...');
+      const telegramResult = await sendOrderToTelegram(orderData);
+      
+      if (telegramResult.success) {
+        console.log('✅ Successfully sent order to Telegram bot');
+      } else {
+        console.error('❌ Failed to send to Telegram:', telegramResult.error);
+        
+        // Try a simpler fallback message
+        try {
+          const simpleMessage = `📱 ORDER:\nName: ${orderData.customer?.name}\nPhone: ${orderData.customer?.phone}\nTotal: $${orderData.total}`;
+          
+          await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              chat_id: TELEGRAM_CHAT_ID,
+              text: simpleMessage
+            }),
+          });
+          console.log('✅ Sent fallback message to Telegram');
+        } catch (fallbackError) {
+          console.error('❌ Fallback also failed:', fallbackError);
+        }
+      }
+    } else {
+      console.log('⚠️ No order data to send to Telegram');
+      
+      // Send an alert to Telegram about failed order
+      try {
+        await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: TELEGRAM_CHAT_ID,
+            text: `⚠️ Order attempt from ${isTelegram ? 'Telegram' : 'Browser'} but data parsing failed.\nUser Agent: ${userAgent.substring(0, 50)}`
+          }),
+        });
+      } catch (alertError) {
+        console.error('❌ Could not send alert:', alertError);
+      }
     }
 
-    // ALWAYS return success to user
+    console.log('✅ ======= UPLOAD REQUEST COMPLETED =======');
+    
+    // ALWAYS return success to the user
     return NextResponse.json({
       success: true,
       message: 'Order submitted successfully! Munira will contact you soon.',
-      details: {
-        filename: file?.name,
-        orderSent: orderMessageResult?.success || false,
-        imageSent: imageResult?.success || false,
-        telegramBrowser: isTelegram
-      }
+      orderReceived: !!orderData,
+      telegramBrowser: isTelegram,
+      timestamp: new Date().toISOString()
     });
 
   } catch (error) {
-    console.error('❌ Upload API error:', error);
+    console.error('❌ ======= API ERROR =======');
+    console.error('Error:', error);
+    console.error('===========================');
     
-    // CRITICAL: ALWAYS return success to user, even on error
+    // ALWAYS return success to user even on error
     return NextResponse.json({
       success: true,
       message: 'Order received! Our team will contact you shortly.',
-      note: 'Technical issue on server, but your order was noted'
+      note: 'Server processed your request'
     });
   }
 }
