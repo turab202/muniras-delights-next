@@ -4,9 +4,8 @@ const nextConfig = {
   trailingSlash: false,
   images: {
     domains: [],
-    unoptimized: true, // Fixes many deploy issues
+    unoptimized: true,
   },
-  swcMinify: true,
 };
 
 export default nextConfig;
