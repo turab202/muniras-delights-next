@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sendToTelegram } from '../telegram/route';
+import { persistOrder } from '../../../lib/order-storage';
+import { isValidPhoneNumber } from '../../../lib/phone';
 
 export async function POST(request: NextRequest) {
   try {
     const orderData = await request.json();
     console.log('📦 Order API received:', orderData);
 
-    // Validate required fields
     if (!orderData.items || orderData.items.length === 0) {
       return NextResponse.json({ error: 'No items in order' }, { status: 400 });
     }
@@ -14,12 +15,15 @@ export async function POST(request: NextRequest) {
     if (!orderData.customer?.name || !orderData.customer?.phone) {
       return NextResponse.json({ error: 'Name and phone are required' }, { status: 400 });
     }
+    if (!isValidPhoneNumber(String(orderData.customer.phone))) {
+      return NextResponse.json({ error: 'Enter a valid phone number' }, { status: 400 });
+    }
 
-    console.log('✅ Order validated, sending to Telegram...');
+    const saved = persistOrder(orderData);
 
-    // Send to Telegram
+    console.log('✅ Order saved to database:', saved);
+
     const telegramResult = await sendToTelegram(orderData);
-
     console.log('📨 Order API Telegram result:', telegramResult);
 
     if (!telegramResult.success) {
@@ -29,7 +33,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       message: 'Order submitted successfully!',
-      orderId: telegramResult.messageId
+      orderId: saved.orderNumber,
+      databaseOrderId: saved.orderId,
     });
 
   } catch (error) {

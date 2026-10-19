@@ -9,14 +9,15 @@ interface Props {
   t: Translations[Language];
   lang: Language;
   addToCart: (item: MenuItem) => void;
+  items?: MenuItem[];
 }
 
-const Menu: React.FC<Props> = ({ t, lang, addToCart }) => {
+const Menu: React.FC<Props> = ({ t, lang, addToCart, items = MENU_ITEMS }) => {
   const [filter, setFilter] = useState<'all' | 'cakes' | 'pastries' | 'catering' | 'icecream'>('all');
 
   const filteredItems = filter === 'all' 
-    ? MENU_ITEMS 
-    : MENU_ITEMS.filter(item => item.category === filter);
+    ? items
+    : items.filter(item => item.category === filter);
 
   const categories = [
     { id: 'all', label: t.menu_filter_all },

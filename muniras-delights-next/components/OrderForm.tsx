@@ -2,6 +2,7 @@
 import React, { useState, useRef } from 'react';
 import { Translations, Language, MenuItem, OrderData } from '../types';
 import { MENU_ITEMS } from '../constants';
+import { isValidPhoneNumber } from '../lib/phone';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Check, Upload, Trash2, ArrowRight, ArrowLeft } from 'lucide-react';
 
@@ -11,6 +12,7 @@ interface Props {
   isOpen: boolean;
   onClose: () => void;
   initialCart: { itemId: string; qty: number }[];
+  items?: MenuItem[];
 }
 
 // Simple toast system
@@ -43,7 +45,7 @@ const Toast: React.FC<{ message: string; type: 'success' | 'error' | 'warning'; 
   );
 };
 
-const OrderForm: React.FC<Props> = ({ t, lang, isOpen, onClose, initialCart }) => {
+const OrderForm: React.FC<Props> = ({ t, lang, isOpen, onClose, initialCart, items = MENU_ITEMS }) => {
   const [step, setStep] = useState(1);
   const [cart, setCart] = useState<{ itemId: string; qty: number }[]>(initialCart);
   const [customer, setCustomer] = useState({ name: '', phone: '', address: '', deliveryDate: '' });
@@ -78,7 +80,7 @@ const OrderForm: React.FC<Props> = ({ t, lang, isOpen, onClose, initialCart }) =
 
   const calculateTotal = () => {
     return cart.reduce((acc, item) => {
-      const product = MENU_ITEMS.find(p => p.id === item.itemId);
+      const product = items.find(p => p.id === item.itemId);
       return acc + (product ? product.price * item.qty : 0);
     }, 0);
   };
@@ -120,6 +122,10 @@ const OrderForm: React.FC<Props> = ({ t, lang, isOpen, onClose, initialCart }) =
         }
         if (!customer.phone.trim()) {
           showToast('Please enter your phone number', 'warning');
+          return false;
+        }
+        if (!isValidPhoneNumber(customer.phone)) {
+          showToast('Enter a valid Ethiopian mobile number or international number', 'warning');
           return false;
         }
         if (!customer.deliveryDate) {
@@ -260,7 +266,7 @@ const OrderForm: React.FC<Props> = ({ t, lang, isOpen, onClose, initialCart }) =
               >
                 <h3 className="text-xl font-bold mb-4 text-accent">{t.order_step_1}</h3>
                 <div className="space-y-4">
-                  {MENU_ITEMS.map(item => {
+                  {items.map(item => {
                     const inCart = cart.find(c => c.itemId === item.id);
                     return (
                       <div key={item.id} className="flex items-center justify-between p-3 border rounded-lg hover:border-primary transition-colors">
@@ -321,11 +327,15 @@ const OrderForm: React.FC<Props> = ({ t, lang, isOpen, onClose, initialCart }) =
                     <label className="block text-sm font-medium text-gray-700 mb-1">{t.label_phone}</label>
                     <input 
                       type="tel" 
+                      required
+                      autoComplete="tel"
+                      inputMode="tel"
                       className="w-full p-2 border rounded-md focus:ring-2 focus:ring-primary focus:outline-none transition-colors"
                       value={customer.phone}
                       onChange={e => setCustomer({...customer, phone: e.target.value})}
-                      placeholder="Enter your phone number"
+                      placeholder="0911 234 567 or +251 911 234 567"
                     />
+                    <p className="mt-1 text-xs text-gray-500">Use a reachable number so we can confirm your order.</p>
                   </div>
                   <div className="md:col-span-2">
                     <label className="block text-sm font-medium text-gray-700 mb-1">{t.label_address}</label>

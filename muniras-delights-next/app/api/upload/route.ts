@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { savePaymentScreenshot, persistOrder } from '../../../lib/order-storage';
+import { isValidPhoneNumber } from '../../../lib/phone';
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -158,8 +160,18 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    if (!order?.customer?.name || !order?.customer?.phone || !Array.isArray(order.items) || order.items.length === 0) {
+      return NextResponse.json({ error: 'Order details, customer name, and phone number are required' }, { status: 400 });
+    }
+    if (!isValidPhoneNumber(String(order.customer.phone))) {
+      return NextResponse.json({ error: 'Enter a valid phone number' }, { status: 400 });
+    }
+
     let orderMessageResult = null;
     let imageResult = null;
+
+    const screenshotUrl = await savePaymentScreenshot(file);
+    const saved = persistOrder(order, screenshotUrl);
 
     // Step 1: Send order message
     if (order) {
@@ -168,7 +180,6 @@ export async function POST(request: NextRequest) {
       
       if (!orderMessageResult.success) {
         console.error('❌ Failed to send order message');
-        // Continue with image upload even if message fails
       }
     }
 
@@ -190,7 +201,10 @@ export async function POST(request: NextRequest) {
       message: 'Order and payment screenshot submitted successfully!',
       filename: file.name,
       orderSent: orderMessageResult?.success || false,
-      imageSent: imageResult.success
+      imageSent: imageResult.success,
+      orderId: saved.orderNumber,
+      databaseOrderId: saved.orderId,
+      screenshotUrl,
     });
 
   } catch (error) {

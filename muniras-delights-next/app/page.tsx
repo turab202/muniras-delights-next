@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { TRANSLATIONS } from '../constants'
+import { TRANSLATIONS, MENU_ITEMS } from '../constants'
 import { Language, MenuItem } from '../types'
 import LanguageSwitcher from '../components/LanguageSwitcher'
 import Hero from '../components/Hero'
@@ -19,10 +19,24 @@ export default function Home() {
   const [cart, setCart] = useState<{ itemId: string; qty: number }[]>([])
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [isClient, setIsClient] = useState(false)
+  const [menuItems, setMenuItems] = useState<MenuItem[]>([])
 
-  // Set client-side only after hydration
   useEffect(() => {
     setIsClient(true)
+    fetch('/api/public/site')
+      .then((res) => res.ok ? res.json() : { products: [] })
+      .then((data) => {
+        const mapped = (data.products ?? []).map((product: any) => ({
+          id: String(product.id),
+          name: { en: product.name, am: product.name, ar: product.name },
+          description: { en: product.description, am: product.description, ar: product.description },
+          price: Number(product.price || 0),
+          category: product.category === 'cakes' || product.category === 'pastries' || product.category === 'catering' || product.category === 'icecream' ? product.category : 'cakes',
+          image: product.image,
+        }))
+        setMenuItems(mapped.length > 0 ? mapped : MENU_ITEMS)
+      })
+      .catch(() => setMenuItems(MENU_ITEMS))
   }, [])
 
   const t = TRANSLATIONS[lang]
@@ -193,7 +207,7 @@ export default function Home() {
       {/* Main Content */}
       <main className="flex-grow pt-20">
         <Hero t={t} onOrderClick={() => setIsOrderOpen(true)} />
-        <Menu t={t} lang={lang} addToCart={addToCart} />
+        <Menu t={t} lang={lang} addToCart={addToCart} items={menuItems} />
         <About t={t} />
         <Testimonials t={t} lang={lang} />
 
@@ -260,6 +274,7 @@ export default function Home() {
         isOpen={isOrderOpen}
         onClose={() => setIsOrderOpen(false)}
         initialCart={cart}
+        items={menuItems}
       />
     </div>
   )
