@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminLoginSchema } from '../../../../lib/api';
-import { verifyAdminCredentials, getAdminUserByUsername, createSessionToken, logAdminActivity } from '../../../../lib/auth';
+import { verifyAdminCredentials, getAdminUserByUsername, createSessionToken, logAdminActivity, ensureDefaultAdminUser } from '../../../../lib/auth';
 import { initializeDatabase, maybeSeedDefaultData } from '../../../../lib/db';
 
 export async function POST(request: NextRequest) {
   try {
     initializeDatabase();
     maybeSeedDefaultData();
+    ensureDefaultAdminUser();
 
     const body = await request.json();
     const parsed = adminLoginSchema.safeParse(body);
@@ -42,6 +43,7 @@ export async function POST(request: NextRequest) {
     logAdminActivity(adminUser.id, 'admin_login', 'Admin logged in');
     return response;
   } catch (error) {
+    console.error('Admin login failed:', error);
     return NextResponse.json({ error: 'Login failed' }, { status: 500 });
   }
 }

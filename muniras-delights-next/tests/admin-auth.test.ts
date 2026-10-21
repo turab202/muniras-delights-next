@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { initializeDatabase, getDatabase } from '../lib/db';
-import { changeAdminPassword, createAdminUser, verifyAdminCredentials, createSessionToken, verifySessionToken } from '../lib/auth';
+import { changeAdminPassword, createAdminUser, ensureDefaultAdminUser, verifyAdminCredentials, createSessionToken, verifySessionToken, listAdminUsers, logAdminActivity } from '../lib/auth';
 
 test('database initializes and creates the expected tables', () => {
   initializeDatabase();
@@ -50,4 +50,36 @@ test('session tokens are signed and verified', () => {
   assert.ok(payload);
   assert.equal(payload.userId, 42);
   assert.equal(payload.username, 'admin-test');
+});
+
+test('bootstrap creates a default admin when no admin exists', () => {
+  const db = getDatabase();
+  db.prepare('DELETE FROM admin_users').run();
+
+  const created = ensureDefaultAdminUser();
+
+  assert.ok(created);
+  assert.equal(verifyAdminCredentials('admin', 'ChangeMe123!'), true);
+});
+
+test('listAdminUsers includes additional admin accounts', () => {
+  createAdminUser('second-admin', 'StrongPass!123', 'Second Admin');
+
+  const users = listAdminUsers();
+  assert.ok(users.some((user) => user.username === 'second-admin'));
+});
+
+test('admin activity is recorded with a timestamp', () => {
+  const user = createAdminUser('activity-test', 'StrongPass!123', 'Activity Test');
+
+  logAdminActivity(user.id, 'admin_login', 'Admin logged in');
+
+  const activity = getDatabase()
+    .prepare('SELECT admin_user_id, action, details, created_at FROM admin_activity WHERE admin_user_id = ? AND action = ? ORDER BY id DESC LIMIT 1')
+    .get(user.id, 'admin_login') as { admin_user_id: number; action: string; details: string; created_at: string };
+
+  assert.equal(activity.admin_user_id, user.id);
+  assert.equal(activity.action, 'admin_login');
+  assert.equal(activity.details, 'Admin logged in');
+  assert.ok(activity.created_at);
 });

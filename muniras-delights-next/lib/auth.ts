@@ -36,6 +36,20 @@ export function verifyAdminCredentials(username: string, password: string) {
   return bcrypt.compareSync(password, user.password_hash);
 }
 
+export function ensureDefaultAdminUser() {
+  const db = getDatabase();
+  const username = process.env.ADMIN_USERNAME || 'admin';
+  const password = process.env.ADMIN_PASSWORD || (process.env.NODE_ENV === 'production' ? null : 'ChangeMe123!');
+  const displayName = process.env.ADMIN_NAME || 'Munira Admin';
+
+  if (!password) return null;
+
+  const existing = db.prepare('SELECT id FROM admin_users WHERE username = ?').get(username) as { id: number } | undefined;
+  if (existing) return existing;
+
+  return createAdminUser(username, password, displayName);
+}
+
 export function changeAdminPassword(userId: number, currentPassword: string, newPassword: string) {
   const db = getDatabase();
   const user = db.prepare('SELECT password_hash FROM admin_users WHERE id = ? AND is_active = 1').get(userId) as { password_hash: string } | undefined;
@@ -48,6 +62,22 @@ export function changeAdminPassword(userId: number, currentPassword: string, new
 
 export function getAdminUserByUsername(username: string) {
   return getDatabase().prepare('SELECT * FROM admin_users WHERE username = ? AND is_active = 1').get(username.trim()) as AdminUser | undefined;
+}
+
+export function listAdminUsers() {
+  return getDatabase().prepare(`
+    SELECT id, username, display_name, is_active, last_login, created_at
+    FROM admin_users
+    WHERE is_active = 1
+    ORDER BY created_at DESC
+  `).all() as Array<{
+    id: number;
+    username: string;
+    display_name: string;
+    is_active: number;
+    last_login: string | null;
+    created_at: string;
+  }>;
 }
 
 export function createSessionToken(userId: number, username: string) {
@@ -84,5 +114,5 @@ export function getAdminUserById(id: number) {
 }
 
 export function logAdminActivity(adminUserId: number | null, action: string, details?: string) {
-  getDatabase().prepare('INSERT INTO admin_activity (admin_user_id, action, details, created_at) VALUES (?, ?, ?, datetime("now"))').run(adminUserId, action, details || null);
+  getDatabase().prepare("INSERT INTO admin_activity (admin_user_id, action, details, created_at) VALUES (?, ?, ?, datetime('now'))").run(adminUserId, action, details || null);
 }
